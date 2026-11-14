@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2d4bd6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="耳コピ">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<title>耳コピプレーヤー YouTube</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+html{color-scheme:light}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}[hidden]{display:none!important}body{margin:0;font-size:14px}
+/* Layout: one-column instrument panel — waveform scrubber on top, transport, then the A–B section deck */
+:root{
+  --bg:#f3f4f7; --panel:#ffffff; --line:#d9dce5; --fg:#1b1e27; --muted:#646a7b;
+  --accent:#2d4bd6; --accent-fg:#ffffff;
+  --a:#d97a12; --b:#0f8f7e; --region:rgba(45,75,214,.12);
+  --wave:#b7bccb; --wave-played:#2d4bd6; --head:#1b1e27;
+  --font-ui:"IBM Plex Sans JP","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --font-num:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12141b; --panel:#1b1e28; --line:#2c3040; --fg:#e8eaf1; --muted:#9097aa;
+  --accent:#7d94ff; --accent-fg:#0d1020;
+  --a:#f4a23f; --b:#36c9b4; --region:rgba(125,148,255,.16);
+  --wave:#3a3f52; --wave-played:#7d94ff; --head:#e8eaf1; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12141b; --panel:#1b1e28; --line:#2c3040; --fg:#e8eaf1; --muted:#9097aa;
+  --accent:#7d94ff; --accent-fg:#0d1020;
+  --a:#f4a23f; --b:#36c9b4; --region:rgba(125,148,255,.16);
+  --wave:#3a3f52; --wave-played:#7d94ff; --head:#e8eaf1; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 32px;
+  -webkit-tap-highlight-color:transparent}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:1.25rem;margin:0;font-weight:700;letter-spacing:.02em}
+.filebtns{display:flex;gap:8px;flex-wrap:wrap}
+button,.filelabel{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:10px 14px;min-height:44px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none}
+button:hover,.filelabel:hover{border-color:var(--muted)}
+button:focus-visible,.filelabel:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.4;cursor:default}
+.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:700}
+.filelabel input{position:absolute;opacity:0;width:1px;height:1px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.now{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.fname{color:var(--muted);font-size:.9rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 200px}
+.clock{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:1.6rem;font-weight:700}
+.clock small{font-size:.95rem;color:var(--muted);font-weight:500}
+.wavebox{position:relative;height:120px;border-radius:8px;overflow:hidden;background:var(--bg);touch-action:none;cursor:pointer}
+canvas{display:block;width:100%;height:100%}
+.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.9rem;text-align:center;padding:12px;pointer-events:none}
+input[type=range]{width:100%;accent-color:var(--accent);margin:10px 0 0;height:28px}
+.transport{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.transport button{padding:10px 4px;flex-direction:column;gap:2px;font-size:.78rem}
+.transport button .ic{font-size:1.15rem;line-height:1}
+.ab{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mark{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.mark.a{border-top:4px solid var(--a)} .mark.b{border-top:4px solid var(--b)}
+.mark .set{font-weight:700;font-size:1rem}
+.mark.a .set{color:var(--a)} .mark.b .set{color:var(--b)}
+.mtime{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:1.3rem;font-weight:700;text-align:center}
+.nudge{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.nudge button{padding:8px 2px;font-size:.8rem;font-family:var(--font-num);min-height:40px}
+.sect{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.sect .primary{flex:1 1 220px;font-size:1.05rem;min-height:52px}
+.toggle{display:inline-flex;align-items:center;gap:8px;padding:0 6px;min-height:44px;cursor:pointer}
+.toggle input{width:22px;height:22px;accent-color:var(--accent)}
+.label{font-size:.75rem;letter-spacing:.08em;color:var(--muted);margin:0 0 8px;font-weight:500}
+.speed{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.speed button{min-width:64px;font-family:var(--font-num)}
+.speed button[aria-pressed=true]{border-color:var(--accent);color:var(--accent);font-weight:700}
+.speedval{font-family:var(--font-num);font-variant-numeric:tabular-nums;min-width:4.5em;text-align:right;font-weight:700}
+.speed input[type=range]{flex:1 1 160px;margin:0}
+.status{min-height:1.3em;font-size:.85rem;color:var(--muted)}
+.keys{font-size:.8rem;color:var(--muted);line-height:1.8}
+kbd{font-family:var(--font-num);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--panel);font-size:.75rem}
+.drop{outline:3px dashed var(--accent);outline-offset:-6px}
+@media (max-width:480px){
+  .transport{grid-template-columns:repeat(3,1fr)}
+  .clock{font-size:1.35rem}
+  .keys{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.urlrow{display:flex;gap:8px;flex-wrap:wrap}
+.urlrow input{flex:1 1 240px;min-width:0;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:44px}
+.urlrow input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.video{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;background:#000;border-radius:10px;overflow:hidden}
+.video iframe,.video>div{position:absolute;inset:0;width:100%;height:100%;border:0}
+.video .empty{color:#c9cbd6}
+.bar{position:relative;height:16px;margin-top:12px;border-radius:8px;background:var(--bg);overflow:hidden}
+.bar .reg{position:absolute;top:0;bottom:0;background:var(--region)}
+.bar .ma,.bar .mb{position:absolute;top:0;bottom:0;width:3px;margin-left:-1px}
+.bar .ma{background:var(--a)} .bar .mb{background:var(--b)}
+.recent{display:flex;flex-direction:column;gap:6px}
+.recent button{justify-content:space-between;text-align:left;width:100%;font-size:.85rem;min-height:40px}
+.recent button span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent .ab{font-family:var(--font-num);color:var(--muted);flex:none;display:inline}
+a.filelabel{text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header>
+    <h1>耳コピプレーヤー <small style="font-weight:500;color:var(--muted);font-size:.8em">YouTube</small></h1>
+    <div class="filebtns"><a class="filelabel" href="./index.html">♪ ファイル版へ</a></div>
+  </header>
+
+  <section class="panel">
+    <form class="urlrow" id="urlForm">
+      <input id="url" type="url" inputmode="url" placeholder="YouTubeのURLを貼り付け" autocomplete="off" aria-label="YouTubeのURL">
+      <button id="paste" type="button">貼り付け</button>
+      <button id="go" type="submit" class="primary">読み込む</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="video"><div id="player"></div><div class="empty" id="empty">上にURLを入れて「読み込む」を押してください</div></div>
+    <div class="now" style="margin:10px 0 0">
+      <div class="fname" id="fname">動画が読み込まれていません</div>
+      <div class="clock"><span id="cur">00:00.0</span> <small>/ <span id="dur">00:00.0</span></small></div>
+    </div>
+    <div class="bar" id="bar"><div class="reg" id="reg" hidden></div><div class="ma" id="ma" hidden></div><div class="mb" id="mb" hidden></div></div>
+    <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="再生位置" style="margin-top:4px">
+    <div class="transport">
+      <button id="toStart" type="button"><span class="ic">⏮</span>最初</button>
+      <button id="back" type="button"><span class="ic">⏪</span>−5秒</button>
+      <button id="play" type="button" class="primary"><span class="ic" id="playIc">▶</span><span id="playTx">再生</span></button>
+      <button id="stop" type="button"><span class="ic">⏹</span>停止</button>
+      <button id="fwd" type="button"><span class="ic">⏩</span>+5秒</button>
+      <button id="toEnd" type="button"><span class="ic">⏭</span>最後</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <p class="label">区間（A–B）</p>
+    <div class="ab">
+      <div class="mark a">
+        <button class="set" id="setA" type="button">始め ◀ ここ</button>
+        <div class="mtime" id="aTime">--:--.-</div>
+        <div class="nudge"><button id="aMinus" type="button">−0.1</button><button id="aGo" type="button">聴く</button><button id="aPlus" type="button">+0.1</button></div>
+      </div>
+      <div class="mark b">
+        <button class="set" id="setB" type="button">終り ◀ ここ</button>
+        <div class="mtime" id="bTime">--:--.-</div>
+        <div class="nudge"><button id="bMinus" type="button">−0.1</button><button id="bGo" type="button">聴く</button><button id="bPlus" type="button">+0.1</button></div>
+      </div>
+    </div>
+    <div class="sect">
+      <button id="section" type="button" class="primary">🔁 区間再生</button>
+      <label class="toggle"><input type="checkbox" id="loop" checked>繰り返す</label>
+      <button id="clearAB" type="button">区間クリア</button>
+    </div>
+    <div class="status" id="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel">
+    <p class="label">再生速度（音程はそのまま）</p>
+    <div class="speed" id="speed"></div>
+  </section>
+
+  <section class="panel" id="recentPanel" hidden>
+    <p class="label">最近の動画（区間も覚えています）</p>
+    <div class="recent" id="recent"></div>
+  </section>
+
+  <p class="keys">キー操作：<kbd>Space</kbd> 再生/一時停止　<kbd>A</kbd> 始め　<kbd>B</kbd> 終り　<kbd>L</kbd> 区間再生　<kbd>←</kbd><kbd>→</kbd> 5秒（<kbd>Shift</kbd>で1秒）</p>
+</div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+let P=null, ready=false, vid=null, title="", dur=0, A=null, B=null, section=false, seeking=false, rate=1, pendingId=null;
+
+const fmt=t=>{ if(t==null||!isFinite(t)) return "--:--.-"; t=Math.max(0,t); const m=Math.floor(t/60), s=t-m*60;
+  return String(m).padStart(2,"0")+":"+s.toFixed(1).padStart(4,"0"); };
+const status=m=>{$("status").textContent=m||"";};
+const now=()=>{ try{ return P&&P.getCurrentTime ? P.getCurrentTime()||0 : 0; }catch(e){ return 0; } };
+const playing=()=>{ try{ return P.getPlayerState()===1; }catch(e){ return false; } };
+const loaded=()=>ready&&vid&&dur>0;
+
+// URL → 動画ID
+function parseId(s){ s=(s||"").trim(); if(/^[\w-]{11}$/.test(s)) return {id:s};
+  try{ const u=new URL(s); let id=null;
+    if(/youtu\.be$/.test(u.hostname)) id=u.pathname.slice(1,12);
+    else if(u.searchParams.get("v")) id=u.searchParams.get("v");
+    else { const m=u.pathname.match(/\/(shorts|embed|live|v)\/([\w-]{11})/); if(m) id=m[2]; }
+    if(!id||!/^[\w-]{11}$/.test(id)) return null;
+    let t=u.searchParams.get("t")||u.searchParams.get("start"); let start=0;
+    if(t){ const m=t.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/); if(m) start=(+m[1]||0)*3600+(+m[2]||0)*60+(+m[3]||0); }
+    return {id,start};
+  }catch(e){ return null; } }
+
+// 保存（この端末のブラウザ内だけ）
+const KEY="mimicopi-yt";
+function store(){ try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch(e){ return []; } }
+function save(){ if(!vid) return; try{ let l=store().filter(x=>x.id!==vid); l.unshift({id:vid,title,A,B,rate}); localStorage.setItem(KEY,JSON.stringify(l.slice(0,20))); }catch(e){} renderRecent(); }
+function renderRecent(){ const l=store(); $("recentPanel").hidden=!l.length; const box=$("recent"); box.textContent="";
+  l.forEach(x=>{ const b=document.createElement("button"); b.type="button";
+    const t=document.createElement("span"); t.textContent=x.title||x.id;
+    const ab=document.createElement("span"); ab.className="ab"; ab.textContent=(x.A!=null||x.B!=null)?fmt(x.A)+"–"+fmt(x.B):"";
+    b.append(t,ab); b.onclick=()=>{ $("url").value="https://youtu.be/"+x.id; load(x.id,0); window.scrollTo({top:0,behavior:"smooth"}); }; box.append(b); }); }
+
+// プレーヤー
+window.onYouTubeIframeAPIReady=()=>{
+  // エラー153対策：iframeを自前で作り、参照元（Referer）を必ず送るよう指定する
+  const ifr=document.createElement("iframe");
+  const qs=new URLSearchParams({enablejsapi:"1",playsinline:"1",rel:"0",controls:"1",origin:location.origin,widget_referrer:location.href.split("?")[0]});
+  ifr.src="https://www.youtube.com/embed/?"+qs.toString();
+  ifr.id="player"; ifr.title="YouTube動画";
+  ifr.setAttribute("referrerpolicy","strict-origin-when-cross-origin");
+  ifr.setAttribute("allow","autoplay; encrypted-media; picture-in-picture; fullscreen");
+  ifr.setAttribute("allowfullscreen","");
+  $("player").replaceWith(ifr);
+  P=new YT.Player(ifr,{
+    events:{
+      onReady:()=>{ ready=true; if(pendingId){ const p=pendingId; pendingId=null; load(p.id,p.start); } },
+      onStateChange:e=>{ syncPlay(); if(e.data===0) section=false; refreshMeta(); },
+      onPlaybackRateChange:e=>{ rate=e.data; renderSpeed(); },
+      onError:e=>{ const c=e.data;
+        status(c===153?"YouTubeの設定エラー(153)です。GitHub Pagesの https:// のURLから開いているか確認してください（ファイルを直接開いた場合は動きません）。":
+               c===101||c===150?"この動画は投稿者が埋め込み再生を許可していないため、ここでは再生できません。":
+               c===100?"動画が見つかりません（削除・非公開の可能性）。":c===2?"URLが正しくないようです。":"再生できませんでした（エラー "+c+"）。"); }
+    }});
+};
+const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api";
+s.onerror=()=>status("YouTubeに接続できません。ネット接続を確認してください。"); document.head.append(s);
+
+function load(id,start){
+  if(!ready){ pendingId={id,start}; status("プレーヤーを準備中…"); return; }
+  const prev=store().find(x=>x.id===id);
+  vid=id; dur=0; title=prev&&prev.title||""; A=prev?prev.A:null; B=prev?prev.B:null; section=false;
+  $("empty").hidden=true; $("fname").textContent=title||"読み込み中…";
+  P.cueVideoById({videoId:id,startSeconds:start||0});
+  if(prev&&prev.rate) setTimeout(()=>applyRate(prev.rate),300);
+  status(prev&&(A!=null||B!=null)?"前回の区間を復元しました。":""); updateAB();
+  try{ history.replaceState(null,"","?v="+id); }catch(e){}
+}
+function refreshMeta(){ try{ const d=P.getDuration(); if(d>0) dur=d; const t=P.getVideoData&&P.getVideoData().title; if(t&&t!==title){ title=t; $("fname").textContent=t; save(); } }catch(e){}
+  $("dur").textContent=fmt(dur); }
+function syncPlay(){ const p=playing(); $("playIc").textContent=p?"⏸":"▶"; $("playTx").textContent=p?"一時停止":"再生"; }
+function seekTo(t){ if(!loaded()) return; t=Math.min(Math.max(0,t),dur-0.05); if(section&&(t<A-0.05||t>B)) section=false; P.seekTo(t,true); }
+function play(){ if(ready&&vid) P.playVideo(); }
+
+$("urlForm").addEventListener("submit",e=>{ e.preventDefault(); const r=parseId($("url").value);
+  if(!r){ status("YouTubeのURLとして読み取れませんでした。"); return; } load(r.id,r.start); });
+$("paste").onclick=async()=>{ try{ const t=await navigator.clipboard.readText(); $("url").value=t; const r=parseId(t); if(r) load(r.id,r.start); else status("クリップボードにYouTubeのURLがありません。"); }
+  catch(e){ $("url").focus(); status("入力欄を長押しして「ペースト」してください。"); } };
+
+$("play").onclick=()=>{ if(!vid) return; if(playing()) P.pauseVideo(); else { if(section&&!(now()<B)) section=false; play(); } };
+$("stop").onclick=()=>{ if(!loaded()) return; P.pauseVideo(); P.seekTo(section&&A!=null?A:0,true); };
+$("toStart").onclick=()=>seekTo(0);
+$("toEnd").onclick=()=>{ if(!loaded()) return; section=false; P.pauseVideo(); seekTo(dur); };
+$("back").onclick=()=>seekTo(now()-5);
+$("fwd").onclick=()=>seekTo(now()+5);
+
+// 区間
+function updateAB(){ $("aTime").textContent=fmt(A); $("bTime").textContent=fmt(B);
+  ["aMinus","aPlus","aGo"].forEach(i=>$(i).disabled=A==null); ["bMinus","bPlus","bGo"].forEach(i=>$(i).disabled=B==null); drawBar(); }
+function setA(t){ if(!loaded()) return; A=Math.max(0,Math.min(t,dur)); if(B!=null&&B<=A){ B=null; status("始めが終りより後ろになったので、終りを解除しました。"); } else status(""); updateAB(); save(); }
+function setB(t){ if(!loaded()) return; B=Math.max(0,Math.min(t,dur)); if(A!=null&&B<=A){ [A,B]=[B,A]; status("終りが始めより前だったので入れ替えました。"); } else status(""); updateAB(); save(); }
+$("setA").onclick=()=>setA(now()); $("setB").onclick=()=>setB(now());
+$("aMinus").onclick=()=>setA(A-0.1); $("aPlus").onclick=()=>setA(A+0.1);
+$("bMinus").onclick=()=>setB(B-0.1); $("bPlus").onclick=()=>setB(B+0.1);
+$("aGo").onclick=()=>{ section=false; seekTo(A); play(); };
+$("bGo").onclick=()=>{ section=false; seekTo(Math.max(0,B-2)); play(); status("終りの2秒前から再生しています。"); };
+function sectionPlay(){ if(!loaded()) return; if(A==null) A=0; if(B==null) B=dur; if(B-A<0.2){ status("区間が短すぎます。"); return; }
+  updateAB(); section=true; P.seekTo(A,true); play(); status(""); }
+$("section").onclick=sectionPlay;
+$("clearAB").onclick=()=>{ A=null;B=null;section=false;updateAB();status("");save(); };
+
+// 速度（YouTubeが対応している値だけ）
+function applyRate(r){ if(!ready||!vid) return; P.setPlaybackRate(r); setTimeout(()=>{ try{ rate=P.getPlaybackRate(); }catch(e){} renderSpeed(); save(); },200); }
+function renderSpeed(){ const box=$("speed"); let rates=[0.25,0.5,0.75,1,1.25,1.5];
+  try{ const r=P.getAvailablePlaybackRates(); if(r&&r.length) rates=r.filter(x=>x<=1.5); }catch(e){}
+  box.textContent=""; rates.forEach(r=>{ const b=document.createElement("button"); b.type="button"; b.textContent=Math.round(r*100)+"%";
+    b.setAttribute("aria-pressed",String(Math.abs(r-rate)<.001)); b.onclick=()=>applyRate(r); box.append(b); }); }
+renderSpeed();
+
+// シークバー
+$("seek").addEventListener("input",e=>{ seeking=true; if(loaded()) $("cur").textContent=fmt(e.target.value/1000*dur); });
+$("seek").addEventListener("change",e=>{ seeking=false; seekTo(e.target.value/1000*dur); });
+function drawBar(){ const show=loaded(); const pct=t=>(t/dur*100)+"%";
+  $("ma").hidden=!(show&&A!=null); $("mb").hidden=!(show&&B!=null); $("reg").hidden=!(show&&(A!=null||B!=null));
+  if(!show) return; if(A!=null) $("ma").style.left=pct(A); if(B!=null) $("mb").style.left=pct(B);
+  const a=A??0, b=B??dur; $("reg").style.left=pct(a); $("reg").style.width=((b-a)/dur*100)+"%"; }
+
+// 監視ループ：区間の終りを細かくチェック
+setInterval(()=>{ if(!ready||!vid) return; if(!dur) { refreshMeta(); updateAB(); }
+  const t=now();
+  if(section&&B!=null&&t>=B&&playing()){ if($("loop").checked) P.seekTo(A,true); else { P.pauseVideo(); section=false; } }
+  $("cur").textContent=fmt(t); if(!seeking&&dur) $("seek").value=Math.round(t/dur*1000);
+},40);
+
+document.addEventListener("keydown",e=>{ if(e.target.tagName==="INPUT"&&e.target.type!=="range"&&e.target.type!=="checkbox") return;
+  const k=e.key.toLowerCase();
+  if(k===" "){e.preventDefault();$("play").click();} else if(k==="a") setA(now()); else if(k==="b") setB(now());
+  else if(k==="l") sectionPlay(); else if(k==="arrowleft"){e.preventDefault();seekTo(now()-(e.shiftKey?1:5));}
+  else if(k==="arrowright"){e.preventDefault();seekTo(now()+(e.shiftKey?1:5));} });
+
+renderRecent(); updateAB();
+const q=new URLSearchParams(location.search).get("v"); if(q&&/^[\w-]{11}$/.test(q)){ $("url").value="https://youtu.be/"+q; load(q,0); }
+})();
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("./sw.js").catch(()=>{});}</script>
+</body>
+</html>
